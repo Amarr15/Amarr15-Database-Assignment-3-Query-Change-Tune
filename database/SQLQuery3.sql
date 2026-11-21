@@ -37,3 +37,86 @@ ORDER BY
     END,
     RemainingAmount DESC;
 GO
+
+
+-- Task 2
+
+--2.1
+INSERT INTO academic.Departments
+    (Code, Name, IsActive)
+	
+	VALUES
+		('DSAI', N'Data Science & Artificial Intelligence', 1);
+
+--2.2
+
+INSERT INTO academic.Courses
+	(DepartmentId,Code,Title,CreditHours,PassingScore,IsActive)
+	
+	VALUES
+		((SELECT Id
+     FROM academic.Departments
+     WHERE Code = 'DSAI')
+	 ,'DSAI-101',N'Introduction to Data Analysis',3,60,1);
+
+
+--2.3
+
+INSERT INTO delivery.AcademicTerms(
+	AcademicYear,
+	TermCode,
+	Name,
+	StartDate,
+	EndDate,
+	RegistrationStartDate,
+	RegistrationEndDate,
+	Status
+	)
+	VALUES(
+	2027,
+	'SUMMER',
+	N'Summer 2027',
+	'2027-06-15',
+	'2027-08-31',
+	'2027-05-01',
+	'2027-06-10',
+	2
+	);
+
+--2.4
+
+INSERT INTO communication.Announcements
+(
+    SectionId,
+    Title,
+    Body,
+    PublishedAtUtc,
+    CreatedByUserId,
+    Status
+)
+VALUES
+(
+    NULL,
+    N'Summer 2027 Registration',
+    N'Summer 2027 registration opens on 1 May.',
+    SYSUTCDATETIME(),
+    1,
+    2
+);
+
+--2.5
+
+INSERT INTO [identity].Roles
+(
+    Code,
+    Name,
+    IsSystem,
+    IsDeleted
+)
+VALUES
+(
+    'TEACHING_ASSISTANT',
+    N'Teaching Assistants',
+    0,
+    0
+);
