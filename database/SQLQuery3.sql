@@ -120,3 +120,49 @@ VALUES
     0,
     0
 );
+
+
+--3.1
+
+GO
+
+CREATE SEQUENCE finance.InvoiceNumberSeq
+    AS INT
+    START WITH 1
+    INCREMENT BY 1;
+GO
+
+-- 3.2:
+INSERT INTO finance.Invoices
+(
+    InvoiceNumber,
+    StudentId,
+    TermId,
+    CurrencyCode,
+    IssuedAtUtc,
+    DueAtUtc,
+    TotalAmount,
+    PaidAmount,
+    Status
+)
+VALUES
+(
+    'LAB-INV-2026-' + RIGHT('000000' + CAST(NEXT VALUE FOR finance.InvoiceNumberSeq AS VARCHAR(6)), 6),
+    (SELECT TOP 1 Id FROM [identity].StudentProfiles),
+    (SELECT TOP 1 Id FROM delivery.AcademicTerms),
+    'EGP',
+    SYSUTCDATETIME(),
+    DATEADD(DAY, 30, SYSUTCDATETIME()),
+    4500.00,
+    0.00,
+    1
+);
+GO
+
+-- 3.3
+BEGIN TRANSACTION;
+    SELECT NEXT VALUE FOR finance.InvoiceNumberSeq AS NumberInsideCancelledTx;
+ROLLBACK TRANSACTION;
+
+SELECT NEXT VALUE FOR finance.InvoiceNumberSeq AS NextNumberAfterRollback;
+GO
