@@ -556,3 +556,36 @@ SELECT Id, Amount
 	PaidAtUtc < '2026-10-16';
 
 
+--8
+
+SELECT TOP (100000)
+    Id AS OrderId,
+    InvoiceNumber,
+    TotalAmount,
+    CurrencyCode,
+    DueAtUtc
+INTO dbo.LargeOrders
+FROM finance.Invoices;
+GO
+
+--Tempdb Spill
+DECLARE @Cutofff DATETIME2 = '2020-01-01';
+
+SELECT *
+	FROM dbo.LargeOrders
+		WHERE DueAtUtc > @Cutofff
+		ORDER BY TotalAmount DESC;
+
+
+DECLARE @Cutoff DATETIME2 = '2020-01-01';
+
+SELECT *
+	FROM dbo.LargeOrders
+	WHERE DueAtUtc > @Cutoff
+	ORDER BY TotalAmount DESC
+	OPTION (RECOMPILE);
+
+--9
+
+SELECT DISTINCT CurrencyCode 
+FROM dbo.LargeOrders;

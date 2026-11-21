@@ -112,3 +112,47 @@ Below is the explanation and logical reads comparison for each query before and 
 - **Problem:** Wrapping `PaidAtUtc` with `CONVERT(VARCHAR(10), PaidAtUtc, 120) = '2026-10-15'` caused a scan on `IX_Payments_PaidAtUtc`.
 - **Fix:** Rewrote using a half-open date range (`>= '2026-10-15' AND < '2026-10-16'`).
 - **Logical Reads:** Reduced from **599 reads** to **3 reads**.
+
+
+---
+
+## Task 8 — When the Estimate Is Wrong (Tempdb Spill)
+
+### 1. What Happened
+The query sorted 100,000 rows from `dbo.LargeOrders`. SQL Server granted only **5,936 KB** of memory based on an estimated row count of 30,000 rows. 
+
+Because the actual rows (100,000 rows) far exceeded the memory grant, memory was exhausted, and the `Sort` operator spilled to `tempdb` with a yellow warning triangle ⚠️:
+> `Operator used tempdb to spill data during execution with spill level 1 and 1 spilled thread(s); Sort wrote 740 pages to and read 740 pages from tempdb with granted memory 5936KB and used memory 5936KB.`
+
+### 2. Why It Happened
+I used a local variable `@Cutoff` in the WHERE clause. SQL Server cannot sniff local variables at compile time, so it used a generic density vector estimate (30,000 rows) instead of the actual data distribution (100,000 rows).
+
+### 3. What Spill Level Means
+- **Spill Level 1:** SQL Server made a single write pass of the overflow data (740 pages) to `tempdb` and read it back once to complete the sort.
+- Higher spill levels (like Level 2+) occur when even the spilled chunks do not fit in memory and require multiple recursive spill passes.
+
+### 4. Why It Is Slow
+Sorting in RAM operates in nanoseconds. Spilling to `tempdb` forces physical disk I/O (writing and reading pages from disk), which adds high disk latency and creates contention on tempdb.
+
+### 5. How It Was Fixed
+I added `OPTION (RECOMPILE)`. This allowed the optimizer to sniff the actual parameter value at execution time, estimating the exact 100,000 rows (100% accuracy). SQL Server granted sufficient memory, and the sort finished completely in memory with zero spills and no warnings.
+
+
+---
+
+## Task 9 — One of Each (Distinct Operators)
+
+### 1. DISTINCT on an Unindexed Column
+I executed `SELECT DISTINCT CurrencyCode FROM dbo.LargeOrders;`.
+- **Operator Used:** **`Hash Match (Aggregate)`**.
+- **How It Works:** SQL Server scans the unindexed table and builds an in-memory Hash Table. For each row, it hashes the `CurrencyCode`. If the hash entry already exists, the duplicate is discarded. If it is new, it is inserted into the hash bucket.
+
+### 2. The Cheaper Duplicate Removal Operator
+- **Operator Name:** **`Stream Aggregate`**.
+- **How It Works:** It reads rows in a single pass with minimal memory overhead. Since data is pre-ordered, duplicates appear adjacent to each other. It compares each row only to the previous row: if identical, it ignores it; if different, it emits the distinct value.
+- **Requirement:** It requires the input data to be **already sorted** on that column (e.g. by having an index on the column or after an explicit Sort).
+
+### 3. DISTINCT on an Already Unique Column
+When running `SELECT DISTINCT Id FROM finance.Invoices;` (or on a Primary Key / Unique column):
+- **Plan Result:** There is **NO aggregation operator at all** (neither Hash Match nor Stream Aggregate).
+- **Explanation:** SQL Server's query optimizer checks the table metadata. Since `Id` is already a Primary Key (guaranteed unique), deduplication is a no-op. The optimizer completely removes the DISTINCT operator and simply scans the index.
