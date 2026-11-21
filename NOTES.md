@@ -156,3 +156,34 @@ I executed `SELECT DISTINCT CurrencyCode FROM dbo.LargeOrders;`.
 When running `SELECT DISTINCT Id FROM finance.Invoices;` (or on a Primary Key / Unique column):
 - **Plan Result:** There is **NO aggregation operator at all** (neither Hash Match nor Stream Aggregate).
 - **Explanation:** SQL Server's query optimizer checks the table metadata. Since `Id` is already a Primary Key (guaranteed unique), deduplication is a no-op. The optimizer completely removes the DISTINCT operator and simply scans the index.
+
+
+---
+
+## Task 10 — The CTO's Question (Numbers vs GUIDs for IDs)
+
+The trade-offs between sequential numbers (`INT`/`BIGINT IDENTITY`) and `GUID` (`UNIQUEIDENTIFIER`):
+
+### 1. Sequential Numbers (`INT` / `BIGINT`)
+- **Pros:**
+  - **Storage:** Small footprint (4 bytes for `INT`, 8 bytes for `BIGINT`), keeping index and data pages compact.
+  - **Performance:** Monotonically increasing values append to the end of the Clustered Index, eliminating page splits and fragmentation.
+  - **Join Speed:** CPU-friendly integer comparisons make joins and lookups extremely fast.
+- **Cons:**
+  - **Centralized:** Requires a round-trip to the database server to generate the next ID (cannot generate IDs on client or offline).
+  - **Security:** Predictable numbers make it easy for attackers to guess or enumerate records (e.g. `order/1001`, `order/1002`).
+  - **Distributed Systems:** Merging data from multiple databases or branches leads to ID collisions.
+
+### 2. GUIDs (`UNIQUEIDENTIFIER`)
+- **Pros:**
+  - **Distributed Generation:** Can be generated anywhere (clients, microservices, mobile apps) without contacting the database, with zero collision risk.
+  - **Security:** Non-sequential and difficult to guess, protecting business volume and preventing enumeration attacks.
+  - **Merging:** Easy to merge databases or replicate data across regions.
+- **Cons:**
+  - **Storage:** 16 bytes (double `BIGINT`), significantly increasing table and index sizes.
+  - **Fragmentation:** Random GUIDs (`NEWID()`) cause heavy page splits and severe index fragmentation when used as clustered keys (partially mitigated with `NEWSEQUENTIALID()`).
+  - **Performance:** Larger indexes mean fewer rows per page, requiring more memory and I/O.
+
+### Recommendation:
+- Use **`BIGINT IDENTITY`** for internal primary keys and clustered indexes to maximize performance and minimize storage.
+- Use **`GUID`** as a public-facing business key (for APIs and URLs) or in distributed/offline systems where clients must generate IDs independently.
