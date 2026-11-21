@@ -589,3 +589,150 @@ SELECT *
 
 SELECT DISTINCT CurrencyCode 
 FROM dbo.LargeOrders;
+
+SELECT DISTINCT Id 
+FROM finance.Invoices;
+
+
+-- 11.1:
+UPDATE academic.Courses
+	SET PassingScore = 65
+	WHERE DepartmentId = 
+	(SELECT Id FROM academic.Departments WHERE Code = 'DSAI');
+GO
+
+UPDATE delivery.Enrollments
+SET FinalGrade = CASE 
+    WHEN FinalScore >= 90 THEN 'A'
+    WHEN FinalScore >= 80 THEN 'B'
+    WHEN FinalScore >= 70 THEN 'C'
+    WHEN FinalScore >= 60 THEN 'D'
+    ELSE 'F'
+END
+WHERE CompletedAtUtc IS NOT NULL 
+  AND FinalScore IS NOT NULL;
+GO
+
+-- 11.3
+DELETE FROM [identity].Roles
+	WHERE Code IN ('TEACHING_ASSISTANT', 'TA') 
+	OR Name = 'Teaching Assistants';
+GO
+
+-- 11.4
+
+DROP TABLE IF EXISTS finance.PaymentStaging;
+GO
+
+CREATE TABLE finance.PaymentStaging
+(
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    InvoiceNumber VARCHAR(30),
+    Amount DECIMAL(12,2),
+    PaidAtUtc DATETIME2
+);
+GO
+
+INSERT INTO finance.PaymentStaging 
+	(InvoiceNumber, Amount, PaidAtUtc)
+	VALUES 
+		('INV-STG-001', 1500.00, SYSUTCDATETIME()),
+		('INV-STG-002', 2500.00, SYSUTCDATETIME()),
+		('INV-STG-003', 3500.00, SYSUTCDATETIME());
+GO
+
+TRUNCATE TABLE finance.PaymentStaging;
+GO
+
+-- 11.5
+DROP TABLE IF EXISTS dbo.LargeOrders;
+DROP TABLE IF EXISTS finance.PaymentStaging;
+GO
+
+
+-- 12.1
+GO
+
+CREATE TABLE academic.CoursePassMarkAudit
+(
+    CourseId INT,
+    OldPassingScore DECIMAL(5,2),
+    NewPassingScore DECIMAL(5,2),
+    ChangedAtUtc DATETIME2,
+    ChangedBy NVARCHAR(100)
+);
+GO
+
+UPDATE academic.Courses
+	SET PassingScore = 70
+	OUTPUT 
+		deleted.Id,
+		deleted.PassingScore AS OldPassingScore,
+		inserted.PassingScore AS NewPassingScore,
+		SYSUTCDATETIME(),
+		SUSER_SNAME()
+	INTO academic.CoursePassMarkAudit 
+	(CourseId, OldPassingScore, NewPassingScore, ChangedAtUtc, ChangedBy)
+	WHERE DepartmentId = 
+	(SELECT Id FROM academic.Departments WHERE Code = 'DSAI');
+GO
+
+-- 12.2
+GO
+
+CREATE TABLE communication.AnnouncementArchive
+(
+    Id BIGINT,
+    Title NVARCHAR(200),
+    Body NVARCHAR(MAX),
+    ExpiresAtUtc DATETIME2,
+    ArchivedAtUtc DATETIME2
+);
+GO
+
+DELETE FROM communication.Announcements
+OUTPUT 
+    deleted.Id,
+    deleted.Title,
+    deleted.Body,
+    deleted.ExpiresAtUtc,
+    SYSUTCDATETIME()
+INTO communication.AnnouncementArchive (Id, Title, Body, ExpiresAtUtc, ArchivedAtUtc)
+WHERE ExpiresAtUtc < DATEADD(MONTH, -6, SYSUTCDATETIME());
+GO
+
+
+GO
+
+CREATE TABLE dbo.WebsiteCourseCatalog
+(
+    CourseId INT PRIMARY KEY,
+    Code VARCHAR(30),
+    Title NVARCHAR(200),
+    CreditHours DECIMAL(5,2),
+    IsActive BIT
+);
+GO
+
+MERGE dbo.WebsiteCourseCatalog AS target
+	USING academic.Courses AS source
+	ON (target.CourseId = source.Id)
+	WHEN MATCHED AND (
+	    target.Code <> source.Code OR 
+	    target.Title <> source.Title OR 
+	    target.CreditHours <> source.CreditHours OR
+		target.IsActive <> source.IsActive
+) THEN
+    UPDATE SET 
+        target.Code = source.Code,
+        target.Title = source.Title,
+        target.CreditHours = source.CreditHours,
+        target.IsActive = source.IsActive
+WHEN NOT MATCHED BY TARGET AND source.IsActive = 1 THEN
+    INSERT (CourseId, Code, Title, CreditHours, IsActive)
+    VALUES (source.Id, source.Code, source.Title, source.CreditHours, source.IsActive)
+WHEN NOT MATCHED BY SOURCE THEN
+    UPDATE SET target.IsActive = 0
+OUTPUT $action, inserted.CourseId, inserted.Title;
+GO
+--«·’—«ÕÂ „‘ ›«Â„ ﬂÊœ «·„Ì—Ã œÂ
