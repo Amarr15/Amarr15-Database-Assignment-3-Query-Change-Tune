@@ -166,3 +166,41 @@ ROLLBACK TRANSACTION;
 
 SELECT NEXT VALUE FOR finance.InvoiceNumberSeq AS NextNumberAfterRollback;
 GO
+
+
+--4
+
+INSERT INTO delivery.Sections
+(
+    CourseId,
+    TermId,
+    SectionCode,
+    Capacity,
+    Location,
+    DeliveryMode,
+    Status
+)
+SELECT 
+    CourseId,
+    (SELECT Id FROM delivery.AcademicTerms WHERE Name = 'Summer 2027'),
+    SectionCode,
+    Capacity,
+    Location,
+    DeliveryMode,
+    Status
+FROM delivery.Sections
+
+WHERE TermId = (
+    SELECT TOP 1 Id 
+    FROM delivery.AcademicTerms 
+    WHERE StartDate < '2027-06-15' AND Name <> 'Summer 2027'
+    ORDER BY StartDate DESC
+);
+GO
+
+SELECT *
+FROM delivery.Sections
+WHERE TermId = (SELECT Id FROM delivery.AcademicTerms WHERE Name = 'Summer 2027');
+GO
+
+
