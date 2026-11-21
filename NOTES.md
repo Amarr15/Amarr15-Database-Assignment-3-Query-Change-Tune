@@ -65,3 +65,50 @@ Instead, the optimizer was much smarter:
 - **Table `finance.Invoices`:** 2,542 logical reads (full clustered index scan).
 - **Table `identity.StudentProfiles`:** 173 logical reads (15 seeks).
 - **Execution Time:** CPU time ~16 ms, Elapsed time ~95 ms.
+
+
+---
+
+## Task 7 — Make It Faster
+
+Below is the explanation and logical reads comparison for each query before and after fixing the SARGability issues:
+
+### 7.1 — Users who registered in March 2026
+- **Problem:** Using `YEAR(CreatedAtUtc)` and `MONTH(CreatedAtUtc)` applies functions to the column, making it non-SARGable and forcing a full index scan.
+- **Fix:** Used a date range (`>= '2026-03-01' AND < '2026-04-01'`).
+- **Logical Reads:** Reduced from **455 reads** (Index Scan) to **13 reads** (Index Seek).
+
+### 7.2 — Payments of the last 30 days
+- **Problem:** `DATEDIFF(DAY, PaidAtUtc, SYSUTCDATETIME()) <= 30` prevents index usage because the indexed column is wrapped in `DATEDIFF`.
+- **Fix:** Isolated the column on one side: `PaidAtUtc >= DATEADD(DAY, -30, SYSUTCDATETIME())`.
+- **Logical Reads:** Reduced from **599 reads** to **76 reads**.
+
+### 7.3 — Last names starting with "Abd"
+- **Problem:** `LEFT(LastName, 3) = N'Abd'` prevents the optimizer from seeking into `IX_Users_LastName`.
+- **Fix:** Replaced with `LastName LIKE N'Abd%'`.
+- **Logical Reads:** Reduced from **1,267 reads** to **20 reads**.
+
+### 7.4 — Math on Id in AuditLogs
+- **Problem:** `Id + 1 = 50001` performs arithmetic on the clustered key, causing a full clustered scan over millions of rows.
+- **Fix:** Simplified the math: `Id = 50000`.
+- **Logical Reads:** Reduced from **127,092 reads** to **4 reads**.
+
+### 7.5 — Implicit Conversion on InvoiceNumber
+- **Problem:** `InvoiceNumber` is `VARCHAR(30)` while `N'LAB-INV-2026-000001'` is `NVARCHAR`. Due to data type precedence, SQL Server converted all column values (`CONVERT_IMPLICIT`), causing a scan with a warning.
+- **Fix:** Removed the `N` prefix to match `VARCHAR`: `'LAB-INV-2026-000001'`.
+- **Logical Reads:** Reduced from **725 reads** to **3 reads**.
+
+### 7.6 — Case Insensitive Login Screen
+- **Problem:** The database collation is already case-insensitive (`SQL_Latin1_General_CP1_CI_AS`), so `UPPER(Email)` was redundant and broke index seek.
+- **Fix:** Removed `UPPER()` on both sides: `Email = @Email`.
+- **Logical Reads:** Reduced from **1,009 reads** to **3 reads**.
+
+### 7.7 — Optional Search Parameter
+- **Problem:** `(@LastName IS NULL OR LastName = @LastName)` forced the optimizer to create a single plan that works for NULL, causing an index scan even when a name was supplied.
+- **Fix:** Added `OPTION (RECOMPILE)` to generate an optimal plan for the supplied value.
+- **Logical Reads:** Reduced from **1,267 reads** to **18 reads**.
+
+### 7.8 — Custom Non-SARGable Example
+- **Problem:** Wrapping `PaidAtUtc` with `CONVERT(VARCHAR(10), PaidAtUtc, 120) = '2026-10-15'` caused a scan on `IX_Payments_PaidAtUtc`.
+- **Fix:** Rewrote using a half-open date range (`>= '2026-10-15' AND < '2026-10-16'`).
+- **Logical Reads:** Reduced from **599 reads** to **3 reads**.

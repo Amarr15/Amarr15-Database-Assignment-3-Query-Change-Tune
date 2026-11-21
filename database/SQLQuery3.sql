@@ -482,3 +482,77 @@ GROUP BY
 ORDER BY DueMonth DESC;
 GO
 
+
+--6
+GO
+
+SET STATISTICS IO ON;
+SET STATISTICS TIME ON;
+GO
+
+SELECT TOP (15)
+    i.InvoiceNumber,
+    sp.StudentNumber,
+    i.TotalAmount - i.PaidAmount AS Remaining,
+    CASE WHEN i.DueAtUtc < DATEADD(DAY, -60, SYSUTCDATETIME()) THEN 'Urgent' ELSE 'Normal' END AS Urgency
+FROM finance.Invoices AS i
+INNER JOIN [identity].StudentProfiles AS sp ON sp.Id = i.StudentId
+WHERE i.PaidAmount < i.TotalAmount
+  AND i.DueAtUtc < SYSUTCDATETIME()
+ORDER BY Remaining DESC;
+GO
+
+SET STATISTICS IO OFF;
+SET STATISTICS TIME OFF;
+GO
+
+
+-- 7.1
+SELECT Id, Email 
+	FROM [identity].Users 
+	WHERE CreatedAtUtc >= '2026-03-01' 
+	AND 
+	CreatedAtUtc < '2026-04-01';
+
+-- 7.2
+SELECT Id, InvoiceId, Amount 
+	FROM finance.Payments 
+	WHERE PaidAtUtc >= DATEADD(DAY, -30, SYSUTCDATETIME());
+
+-- 7.3
+SELECT Id, FirstName, LastName 
+	FROM [identity].Users 
+	WHERE LastName LIKE N'Abd%';
+
+-- 7.4
+SELECT * 
+	FROM operations.AuditLogs 
+	WHERE Id = 50000;
+
+-- 7.5
+SELECT Id, TotalAmount, PaidAmount 
+	FROM finance.Invoices 
+	WHERE InvoiceNumber = 'LAB-INV-2026-000001';
+
+-- 7.6
+DECLARE @Email VARCHAR(320) = 'it.admin@northbridge.edu';
+	SELECT Id, FirstName, LastName 
+		FROM [identity].Users 
+		WHERE Email = @Email;
+
+-- 7.7
+DECLARE @LastName NVARCHAR(100) = N'Hassan';
+	SELECT Id, FirstName, Email 
+		FROM [identity].Users 
+		WHERE (@LastName IS NULL OR LastName = @LastName)
+		OPTION (RECOMPILE);
+
+-- 7.8
+
+SELECT Id, Amount 
+	FROM finance.Payments 
+	WHERE PaidAtUtc >= '2026-10-15' 
+	AND 
+	PaidAtUtc < '2026-10-16';
+
+
